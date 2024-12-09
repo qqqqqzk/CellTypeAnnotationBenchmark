@@ -1,3 +1,5 @@
+args <- commandArgs(TRUE)
+
 run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = NULL,NumGenes = NULL){
   "
   run scPred
@@ -30,60 +32,66 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   #                                scPred                                     #
   #############################################################################
   library(scPred)
-  library(tidyverse)
-  library(SingleCellExperiment)
+  library(Seurat)
+  library(magrittr)
+  library(harmony)  
   True_Labels_scPred <- list()
   Pred_Labels_scPred <- list()
   Training_Time_scPred <- list()
   Testing_Time_scPred <- list()
+  #Training_Memory_scPred <- list()
+  #Testing_Memory_scPred <- list()
   Data = t(as.matrix(Data))
   
-  for (i in c(1:n_folds)){
-    if(!is.null(GeneOrderPath) & !is.null (NumGenes)){
-      sce <- SingleCellExperiment(list(normcounts = Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Train_Idx[[i]]]), 
-                                  colData = data.frame(cell_type1 = Labels[Train_Idx[[i]]]))
-      sce_counts <- normcounts(sce)
-      sce_cpm <- apply(sce_counts, 2, function(x) (x/sum(x))*1000000)
-      sce_metadata <- as.data.frame(colData(sce))
-      
-      sce_test <- SingleCellExperiment(list(normcounts = Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Test_Idx[[i]]]), 
-                                       colData = data.frame(cell_type1 = Labels[Test_Idx[[i]]]))
-      sce_counts_test <- normcounts(sce_test)
-      sce_cpm_test <- apply(sce_counts_test, 2, function(x) (x/sum(x))*1000000)
-      sce_metadata_test <- as.data.frame(colData(sce_test))
-    }
-    else{
-      sce <- SingleCellExperiment(list(normcounts = Data[,Train_Idx[[i]]]), 
-                                  colData = data.frame(cell_type1 = Labels[Train_Idx[[i]]]))
-      sce_counts <- normcounts(sce)
-      sce_cpm <- apply(sce_counts, 2, function(x) (x/sum(x))*1000000)
-      sce_metadata <- as.data.frame(colData(sce))
-      
-      sce_test <- SingleCellExperiment(list(normcounts = Data[,Test_Idx[[i]]]), 
-                                       colData = data.frame(cell_type1 = Labels[Test_Idx[[i]]]))
-      sce_counts_test <- normcounts(sce_test)
-      sce_cpm_test <- apply(sce_counts_test, 2, function(x) (x/sum(x))*1000000)
-      sce_metadata_test <- as.data.frame(colData(sce_test))
-    }
+  for (i in c(1:2)){
+  #for (i in c(1:n_folds)){
+    seuratobj <- CreateSeuratObject(counts = Data[,Train_Idx[[i]]])
+    train_Labels <- as.data.frame(Labels[Train_Idx[[i]]], 
+                                  row.names = colnames(seuratobj))
+    colnames(train_Labels) <- c('Labels')
+    seuratobj <- AddMetaData(seuratobj, metadata = train_Labels)
     
+    test_seuratobj <- CreateSeuratObject(counts = Data[,Test_Idx[[i]]])
+    test_Labels <- as.data.frame(Labels[Test_Idx[[i]]], 
+                                 row.names = colnames(test_seuratobj))
+    colnames(test_Labels) <- c('Labels')
+    test_seuratobj <- AddMetaData(test_seuratobj, metadata = test_Labels)
     
     # scPred Training    
+    #Rprof(paste0(OutputDir,"/Rprof.out"), memory.profiling=TRUE)
     start_time <- Sys.time()
-    set.seed(1234)
-    scp <- eigenDecompose(sce_cpm)
-    scPred::metadata(scp) <- sce_metadata
-    scp <- getFeatureSpace(scp, pVar = 'cell_type1')
-    # plotEigen(scp, group = 'cell_type1')
-    scp <- trainModel(scp)
-    # plotTrainProbs(scp)
+      
+    seuratobj <- seuratobj %>% 
+      NormalizeData() %>% 
+      FindVariableFeatures() %>% 
+      ScaleData() %>% 
+      RunPCA() %>% 
+      RunUMAP(dims = 1:30)
+    seuratobj <- getFeatureSpace(seuratobj, "Labels")
+    seuratobj <- trainModel(seuratobj)
+      
     end_time <- Sys.time()
+    #Rprof(NULL)
     Training_Time_scPred[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
+    #print('memory usage:')
+    #max_mem <- max(summaryRprof(paste0(OutputDir,"/Rprof.out"),memory="both")$by.total$mem.total)
+    #print(max_mem)
+    #Training_Memory_scPred[i] <- max_mem
     
     # scPred Prediction
+    #Rprof(paste0(OutputDir,"/Rprof.out"), memory.profiling=TRUE)
     start_time <- Sys.time()
-    scp <- scPredict(scp,newData = sce_cpm_test)
+      
+    test_seuratobj <- NormalizeData(test_seuratobj)
+    test_seuratobj <- scPredict(test_seuratobj, seuratobj)
+        
     end_time <- Sys.time()
+    #Rprof(NULL)
     Testing_Time_scPred[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
+    print('memory usage:')
+    #max_mem <- max(summaryRprof(paste0(OutputDir,"/Rprof.out"),memory="both")$by.total$mem.total)
+    #print(max_mem)
+    #Testing_Memory_scPred[i] <- max_mem
     
     True_Labels_scPred[i] <- list(Labels[Test_Idx[[i]]])
     Pred_Labels_scPred[i] <- list(getPredictions(scp)$predClass)
@@ -92,19 +100,21 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   Pred_Labels_scPred <- as.vector(unlist(Pred_Labels_scPred))
   Training_Time_scPred <- as.vector(unlist(Training_Time_scPred))
   Testing_Time_scPred <- as.vector(unlist(Testing_Time_scPred))
+  #Training_Memory_scPred <- as.vector(unlist(Training_Memory_scPred))
+  #Testing_Memory_scPred <- as.vector(unlist(Testing_Memory_scPred))
   
   setwd(OutputDir)
   
-  if(!is.null(GeneOrderPath) & !is.null (NumGenes)){
-    write.csv(True_Labels_scPred,paste('scPred_',NumGenes,'_True_Labels.csv', sep = ''),row.names = FALSE)
-    write.csv(Pred_Labels_scPred,paste('scPred_',NumGenes,'_Pred_Labels.csv', sep = ''),row.names = FALSE)
-    write.csv(Training_Time_scPred,paste('scPred_',NumGenes,'_Training_Time.csv', sep = ''),row.names = FALSE)
-    write.csv(Testing_Time_scPred,paste('scPred_',NumGenes,'_Testing_Time.csv', sep = ''),row.names = FALSE)
-  }
-  else{
-    write.csv(True_Labels_scPred,'scPred_True_Labels.csv',row.names = FALSE)
-    write.csv(Pred_Labels_scPred,'scPred_Pred_Labels.csv',row.names = FALSE)
-    write.csv(Training_Time_scPred,'scPred_Training_Time.csv',row.names = FALSE)
-    write.csv(Testing_Time_scPred,'scPred_Testing_Time.csv',row.names = FALSE)
-  }
+  write.csv(True_Labels_scPred,'scPred_True_Labels.csv',row.names = FALSE)
+  write.csv(Pred_Labels_scPred,'scPred_Pred_Labels.csv',row.names = FALSE)
+  write.csv(Training_Time_scPred,'scPred_Training_Time.csv',row.names = FALSE)
+  write.csv(Testing_Time_scPred,'scPred_Testing_Time.csv',row.names = FALSE)
+  #write.csv(Training_Memory_scPred,'scPred_Training_Memory.csv',row.names = FALSE)
+  #write.csv(Testing_Memory_scPred,'scPred_Testing_Memory.csv',row.names = FALSE)
+}
+
+if (args[6] == "0") {
+  run_scPred(args[1], args[2], args[3], args[4])
+} else {
+  run_scPred(args[1], args[2], args[3], args[4], args[5], as.numeric(args[6]))
 }

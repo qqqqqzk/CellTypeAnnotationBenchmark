@@ -18,24 +18,25 @@ Cross_Validation <- function(LabelsPath, col_Index = 1, OutputDir){
   Labels <- as.matrix(read.csv(LabelsPath))
   Labels <- as.vector(Labels[,col_Index])
 
-  Removed_classes <- !(table(Labels) > 10)
+  Removed_classes <- !(table(Labels) > 10)  # !(table(Labels) > 10)
   Cells_to_Keep <- !(is.element(Labels,names(Removed_classes)[Removed_classes]))
   Labels <- Labels[Cells_to_Keep]
 
   # Getting training and testing Folds
-  library(rBayesianOptimization)
-  n_folds = 5
-  Folds <- KFold(Labels,nfolds = n_folds, stratified = TRUE)
-  Test_Folds <- c(n_folds:1)
+  dataset_index <- read.csv(sub('Labels', 'datasets', LabelsPath))
+  dataset_index <- as.data.frame(dataset_index[Cells_to_Keep,])
+  #dataset_index <- read.csv(paste(data_path, '/datasets.csv', sep=''))
   Train_Idx <- list()
   Test_Idx <- list()
-  for (i in c(1:length(Folds))){
-    Temp_Folds <- Folds
-    Temp_Folds[Test_Folds[i]] <- NULL
-    Train_Idx[i] <- list(unlist(Temp_Folds))
-    Test_Idx[i] <- Folds[Test_Folds[i]]
+  n_folds <- 5
+  # unique value of dataset_index
+  unival <- unique(dataset_index$dataset_index)
+  for (i in 1:n_folds){
+      # train: exclude i dataset
+      Train_Idx[[i]] <- which(dataset_index$dataset_index != unival[i])
+      # test: include i dataset only
+      Test_Idx[[i]] <- which(dataset_index$dataset_index == unival[i])
   }
-  remove(Temp_Folds,i,Folds)
   save(n_folds,Train_Idx,Test_Idx,col_Index,Cells_to_Keep,file = paste0(OutputDir, '/CV_folds.RData'))
 }
 

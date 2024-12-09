@@ -38,6 +38,8 @@ run_singleCellNet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrder
   Pred_Labels_singleCellNet <- list()
   Training_Time_singleCellNet <- list()
   Testing_Time_singleCellNet <- list()
+  Training_Memory_singleCellNet <- list()
+  Testing_Memory_singleCellNet <- list()
   Data = t(as.matrix(Data))              # deals also with sparse matrix
 
   for(i in c(1:n_folds)){
@@ -50,6 +52,7 @@ run_singleCellNet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrder
       DataTest <- Data[,Test_Idx[[i]]]
     }
 
+    Rprof(paste0(OutputDir,"/Rprof.out"), memory.profiling=TRUE)
     start_time <- Sys.time()
     cgenes2<-findClassyGenes(DataTrain, data.frame(Annotation = Labels[Train_Idx[[i]]]), "Annotation")
     cgenesA<-cgenes2[['cgenes']]
@@ -59,13 +62,24 @@ run_singleCellNet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrder
     pdTrain<-query_transform(DataTrain[cgenesA, ], xpairs)
     rf<-sc_makeClassifier(pdTrain[xpairs,], genes=xpairs, groups=grps)
     end_time <- Sys.time()
+    Rprof(NULL)
     Training_Time_singleCellNet[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
+    print('memory usage:')
+    max_mem <- max(summaryRprof(paste0(OutputDir,"/Rprof.out"),memory="both")$by.total$mem.total)
+    print(max_mem)
+    Training_Memory_singleCellNet[i] <- max_mem
 
+    Rprof(paste0(OutputDir,"/Rprof.out"), memory.profiling=TRUE)
     start_time <- Sys.time()
     DataTest<-query_transform(DataTest[cgenesA,], xpairs)
     classRes <-rf_classPredict(rf, DataTest)
     end_time <- Sys.time()
+    Rprof(NULL)
     Testing_Time_singleCellNet[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
+    print('memory usage:')
+    max_mem <- max(summaryRprof(paste0(OutputDir,"/Rprof.out"),memory="both")$by.total$mem.total)
+    print(max_mem)
+    Testing_Memory_singleCellNet[i] <- max_mem
 
     True_Labels_singleCellNet[i] <- list(Labels[Test_Idx[[i]]])
     Pred_Labels_singleCellNet[i] <- list((rownames(classRes)[apply(classRes,2,which.max)])[1:length(Test_Idx[[i]])])
@@ -74,10 +88,14 @@ run_singleCellNet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrder
   Pred_Labels_singleCellNet <- as.vector(unlist(Pred_Labels_singleCellNet))
   Training_Time_singleCellNet <- as.vector(unlist(Training_Time_singleCellNet))
   Testing_Time_singleCellNet <- as.vector(unlist(Testing_Time_singleCellNet))
+  Training_Memory_singleCellNet <- as.vector(unlist(Training_Memory_singleCellNet))
+  Testing_Memory_singleCellNet <- as.vector(unlist(Testing_Memory_singleCellNet))
   write.csv(True_Labels_singleCellNet,paste0(OutputDir,'/singleCellNet_true.csv'),row.names = FALSE)
   write.csv(Pred_Labels_singleCellNet,paste0(OutputDir,'/singleCellNet_pred.csv'),row.names = FALSE)
   write.csv(Training_Time_singleCellNet,paste0(OutputDir,'/singleCellNet_training_time.csv'),row.names = FALSE)
   write.csv(Testing_Time_singleCellNet,paste0(OutputDir,'/singleCellNet_test_time.csv'),row.names = FALSE)
+  write.csv(Training_Memory_singleCellNet,paste0(OutputDir,'/singleCellNet_training_memory.csv'),row.names = FALSE)
+  write.csv(Testing_Memory_singleCellNet,paste0(OutputDir,'/singleCellNet_test_memory.csv'),row.names = FALSE)
 }
 
 if (args[6] == "0") {

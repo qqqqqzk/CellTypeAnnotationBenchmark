@@ -190,11 +190,13 @@ rule CHETAH:
   output:
     pred = "{output_dir}/CHETAH/CHETAH_pred.csv",
     true = "{output_dir}/CHETAH/CHETAH_true.csv",
-    total_time = "{output_dir}/CHETAH/CHETAH_total_time.csv"
+    total_time = "{output_dir}/CHETAH/CHETAH_total_time.csv",
+    total_memory = "{output_dir}/CHETAH/CHETAH_total_memory.csv"
   log: "{output_dir}/CHETAH/CHETAH.log"
   params:
     n_features = config.get("number_of_features", 0)
-  singularity: "docker://scrnaseqbenchmark/chetah:{}".format(dockerTag)
+  #singularity: "docker://scrnaseqbenchmark/chetah:{}".format(dockerTag)
+  singularity: "micromamba.sif"
   shell:
     "Rscript Scripts/run_CHETAH.R "
     "{input.datafile} "
@@ -229,62 +231,120 @@ rule SingleR:
     "{params.n_features} "
     "&> {log}"
 
-#NOTE non-conformant to the rest of the rules.
-rule Garnett_CV:
+rule transferdata:
   input:
     datafile = config["datafile"],
     labfile = config["labfile"],
     folds = "{output_dir}/CV_folds.RData",
-    genes_names = config.get("genes", "UNSPECIFIEDFILE"),
-    markers = config.get("Garnett_CV", {}).get(
-        "markers", "UNSPECIFIEDFILE")
+    ranking = feature_ranking
   output:
-    pred = "{output_dir}/Garnett_CV/Garnett_CV_pred.csv",
-    true = "{output_dir}/Garnett_CV/Garnett_CV_true.csv",
-    test_time = "{output_dir}/Garnett_CV/Garnett_CV_test_time.csv",
-    training_time = "{output_dir}/Garnett_CV/Garnett_CV_training_time.csv"
-  log: "{output_dir}/Garnett_CV/Garnett_CV.log"
+    pred = "{output_dir}/transferdata/transferdata_pred.csv",
+    true = "{output_dir}/transferdata/transferdata_true.csv",
+    test_time = "{output_dir}/transferdata/transferdata_test_Time.csv",
+    training_time = "{output_dir}/transferdata/transferdata_training_Time.csv",
+    test_memory = "{output_dir}/transferdata/transferdata_test_Memory.csv",
+    training_memory = "{output_dir}/transferdata/transferdata_training_Memory.csv"
+  log: "{output_dir}/transferdata/transferdata.log"
+  benchmark:
+        "{output_dir}/transferdata/benchmark.txt"
   params:
-    human = "T" if config.get("human", True) else "F"
-  singularity: "docker://scrnaseqbenchmark/garnett:{}".format(dockerTag)
+    n_features = 0
+    #n_features = config.get("number_of_features", 0)
+  singularity: "docker://derrickd/scpred_cellstates:102021_msigdbr"
   shell:
-    "Rscript Scripts/run_Garnett_CV.R "
+    "Rscript Scripts/run_transferdata.R "
     "{input.datafile} "
     "{input.labfile} "
     "{input.folds} "
-    "{input.genes_names} "
-    "{input.markers} "
-    "{wildcards.output_dir}/Garnett_CV "
-    "{params.human} "
+    "{wildcards.output_dir}/transferdata "
+    "{input.ranking} "
+    "{params.n_features} "
     "&> {log}"
 
-#NOTE non-conformant to the rest of the rules.
-rule Garnett_Pretrained: #TODO test this
+rule scPred:
   input:
     datafile = config["datafile"],
     labfile = config["labfile"],
     folds = "{output_dir}/CV_folds.RData",
-    genes_names = config.get("genes", "UNSPECIFIEDFILE"),
-    classifier = config.get("Garnett_Pretrained", {}).get(
-        "classifier", "UNSPECIFIEDFILE")
+    ranking = feature_ranking
   output:
-    pred = "{output_dir}/Garnett_Pretrained/Garnett_Pretrained_pred.csv",
-    true = "{output_dir}/Garnett_Pretrained/Garnett_Pretrained_true.csv",
-    test_time = "{output_dir}/Garnett_Pretrained/Garnett_Pretrained_test_time.csv"
-  log: "{output_dir}/Garnett_Pretrained/Garnett_Pretrained.log"
+    pred = "{output_dir}/scPred/scPred_Pred_Labels.csv",
+    true = "{output_dir}/scPred/scPred_True_Labels.csv",
+    test_time = "{output_dir}/scPred/scPred_Testing_Time.csv",
+    training_time = "{output_dir}/scPred/scPred_Training_Time.csv",
+    test_memory = "{output_dir}/scPred/scPred_Testing_Memory.csv",
+    training_memory = "{output_dir}/scPred/scPred_Training_Memory.csv"
+  log: "{output_dir}/scPred/scPred.log"
   params:
-    human = "T" if config.get("human", True) else "F"
-  singularity: "docker://scrnaseqbenchmark/garnett:{}".format(dockerTag)
+    n_features = config.get("number_of_features", 0)
+  singularity: "docker://derrickd/scpred_cellstates:102021_msigdbr"
   shell:
-    "Rscript Scripts/run_Garnett_Pretrained.R "
+    "Rscript Scripts/run_scPred.R "
     "{input.datafile} "
     "{input.labfile} "
-    "{input.genes_names} "
     "{input.folds} "
-    "{input.classifier} "
-    "{wildcards.output_dir}/Garnett_Pretrained "
-    "{params.human} "
+    "{wildcards.output_dir}/scPred "
+    "{input.ranking} "
+    "{params.n_features} "
     "&> {log}"
+
+##NOTE non-conformant to the rest of the rules.
+#rule Garnett_CV:
+#  input:
+#    datafile = config["datafile"],
+#    labfile = config["labfile"],
+#    folds = "{output_dir}/CV_folds.RData",
+#    #genes_names = config.get("genes", "gene_UNSPECIFIEDFILE"),
+#    #markers = config.get("Garnett_CV", {}).get(
+#    #    "markers", "marker_UNSPECIFIEDFILE")
+#    #markers = config['markers']
+#  output:
+#    pred = "{output_dir}/Garnett_CV/Garnett_CV_pred.csv",
+#    true = "{output_dir}/Garnett_CV/Garnett_CV_true.csv",
+#    test_time = "{output_dir}/Garnett_CV/Garnett_CV_test_time.csv",
+#    training_time = "{output_dir}/Garnett_CV/Garnett_CV_training_time.csv"
+#  log: "{output_dir}/Garnett_CV/Garnett_CV.log"
+#  params:
+#    human = "T" if config.get("human", True) else "F"
+#  singularity: "docker://scrnaseqbenchmark/garnett:{}".format(dockerTag)
+#  shell:
+#    "Rscript Scripts/run_Garnett_CV.R "
+#    "{input.datafile} "
+#    "{input.labfile} "
+#    "{input.folds} "
+#    #"{input.genes_names} "
+#    "{input.markers} "
+#    "{wildcards.output_dir}/Garnett_CV "
+#    "{params.human} "
+#    "&> {log}"
+#
+##NOTE non-conformant to the rest of the rules.
+#rule Garnett_Pretrained: #TODO test this
+#  input:
+#    datafile = config["datafile"],
+#    labfile = config["labfile"],
+#    folds = "{output_dir}/CV_folds.RData",
+#    genes_names = config.get("genes", "UNSPECIFIEDFILE"),
+#    classifier = config.get("Garnett_Pretrained", {}).get(
+#        "classifier", "UNSPECIFIEDFILE")
+#  output:
+#    pred = "{output_dir}/Garnett_Pretrained/Garnett_Pretrained_pred.csv",
+#    true = "{output_dir}/Garnett_Pretrained/Garnett_Pretrained_true.csv",
+#    test_time = "{output_dir}/Garnett_Pretrained/Garnett_Pretrained_test_time.csv"
+#  log: "{output_dir}/Garnett_Pretrained/Garnett_Pretrained.log"
+#  params:
+#    human = "T" if config.get("human", True) else "F"
+#  singularity: "docker://scrnaseqbenchmark/garnett:{}".format(dockerTag)
+#  shell:
+#    "Rscript Scripts/run_Garnett_Pretrained.R "
+#    "{input.datafile} "
+#    "{input.labfile} "
+#    "{input.genes_names} "
+#    "{input.folds} "
+#    "{input.classifier} "
+#    "{wildcards.output_dir}/Garnett_Pretrained "
+#    "{params.human} "
+#    "&> {log}"
 
 
 """

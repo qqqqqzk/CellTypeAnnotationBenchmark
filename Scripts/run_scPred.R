@@ -37,14 +37,15 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   library(harmony)  
   True_Labels_scPred <- list()
   Pred_Labels_scPred <- list()
+  Processing_Time_scPred <- list()
   Training_Time_scPred <- list()
   Testing_Time_scPred <- list()
   #Training_Memory_scPred <- list()
   #Testing_Memory_scPred <- list()
   Data = t(as.matrix(Data))
   
-  for (i in c(1:2)){
-  #for (i in c(1:n_folds)){
+  for (i in c(1:n_folds)){
+    print(paste0(i, ' start'))
     seuratobj <- CreateSeuratObject(counts = Data[,Train_Idx[[i]]])
     train_Labels <- as.data.frame(Labels[Train_Idx[[i]]], 
                                   row.names = colnames(seuratobj))
@@ -67,6 +68,13 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
       ScaleData() %>% 
       RunPCA() %>% 
       RunUMAP(dims = 1:30)
+
+    test_seuratobj <- NormalizeData(test_seuratobj)
+
+    end_time <- Sys.time()
+    Processing_Time_scPred[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
+
+    start_time <- Sys.time()
     seuratobj <- getFeatureSpace(seuratobj, "Labels")
     seuratobj <- trainModel(seuratobj)
       
@@ -81,10 +89,7 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
     # scPred Prediction
     #Rprof(paste0(OutputDir,"/Rprof.out"), memory.profiling=TRUE)
     start_time <- Sys.time()
-      
-    test_seuratobj <- NormalizeData(test_seuratobj)
     test_seuratobj <- scPredict(test_seuratobj, seuratobj)
-        
     end_time <- Sys.time()
     #Rprof(NULL)
     Testing_Time_scPred[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
@@ -98,6 +103,7 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   }
   True_Labels_scPred <- as.vector(unlist(True_Labels_scPred))
   Pred_Labels_scPred <- as.vector(unlist(Pred_Labels_scPred))
+  Processing_Time_scPred <- as.vector(unlist(Processing_Time_scPred))
   Training_Time_scPred <- as.vector(unlist(Training_Time_scPred))
   Testing_Time_scPred <- as.vector(unlist(Testing_Time_scPred))
   #Training_Memory_scPred <- as.vector(unlist(Training_Memory_scPred))
@@ -109,6 +115,7 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   write.csv(Pred_Labels_scPred,'scPred_Pred_Labels.csv',row.names = FALSE)
   write.csv(Training_Time_scPred,'scPred_Training_Time.csv',row.names = FALSE)
   write.csv(Testing_Time_scPred,'scPred_Testing_Time.csv',row.names = FALSE)
+  write.csv(Processing_Time_scPred,'scPred_Processinging_Time.csv',row.names = FALSE)
   #write.csv(Training_Memory_scPred,'scPred_Training_Memory.csv',row.names = FALSE)
   #write.csv(Testing_Memory_scPred,'scPred_Testing_Memory.csv',row.names = FALSE)
 }

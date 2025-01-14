@@ -1,9 +1,9 @@
 args <- commandArgs(TRUE)
 
-run_transferdata <- function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = NULL,NumGenes = NULL){
+run_transferdata <- function(DataPath,LabelsPath,CV_RDataPath,OutputDir,ExternalTestDataPath,ExternalTestLabelsPath,GeneOrderPath = NULL,NumGenes = NULL){
   "
   run transferdata
-  Wrapper script to run scmap on a benchmark dataset with 5-fold cross validation,
+  Wrapper script to run transferdata on a benchmark dataset with 5-fold cross validation,
   outputs lists of true and predicted cell labels as csv files, as well as computation time.
   
   Parameters
@@ -27,54 +27,66 @@ run_transferdata <- function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrde
   Labels <- Labels[Cells_to_Keep]
   dataset_index <- dataset_index[Cells_to_Keep,]
   Data <- t(as.matrix(Data))
-  #if(!is.null(GeneOrderPath) & !is.null (NumGenes)){
-  #  GenesOrder = read.csv(GeneOrderPath)
-  #}
+
+  ExternalTestData <- read.csv(ExternalTestDataPath,row.names = 1)
+  ExternalTestLabels <- as.matrix(read.csv(ExternalTestLabelsPath))
+  ExternalTestData <- t(as.matrix(ExternalTestData))
   
   #############################################################################
   #                             transferdata                                  #
   #############################################################################
   library(Seurat)
+  options(future.globals.maxSize = 8000 * 1024^2)  # SCTransform
   True_Labels_transferdata <- list()
   Pred_Labels_transferdata <- list()
-  Training_Time_transferdata <- list()
+  ExternalPred_Labels_transferdata <- list()
+  Prep_Time_transferdata <- list()
   Testing_Time_transferdata <- list()
-  Training_Memory_transferdata <- list()
+  ExternalTesting_Time_transferdata <- list()
+  Prep_Memory_transferdata <- list()
   Testing_Memory_transferdata <- list()
+  ExternalTesting_Memory_transferdata <- list()
   
   for (i in c(1:n_folds)){
+    print(paste0(i, ' start'))
 
     # Train set
     seuratobj <- CreateSeuratObject(counts = Data[,Train_Idx[[i]]])
-    # add dataset_index
+    # 1. add cv dataset_index -> splitObject()
     train_dataset_index <- as.data.frame(dataset_index[Train_Idx[[i]]], 
-                               row.names = colnames(seuratobj))
+                                         row.names = colnames(seuratobj))
     colnames(train_dataset_index) <- c('dataset_index')
     seuratobj <- AddMetaData(seuratobj, metadata = train_dataset_index)
 
-    # add labels
+    # 2. add labels
     train_Labels <- as.data.frame(Labels[Train_Idx[[i]]], 
-                        row.names = colnames(seuratobj))
+                                  row.names = colnames(seuratobj))
     colnames(train_Labels) <- c('Labels')
     seuratobj <- AddMetaData(seuratobj, metadata = train_Labels)
     
     # Test set
     test_seuratobj <- CreateSeuratObject(counts = Data[,Test_Idx[[i]]])
-test_seuratobj
-    # add dataset_index
+    # 1. add dataset_index
     test_dataset_index <- as.data.frame(dataset_index[Test_Idx[[i]]], 
-                             row.names = colnames(test_seuratobj))
+                                        row.names = colnames(test_seuratobj))
     colnames(test_dataset_index) <- c('dataset_index')
     test_seuratobj <- AddMetaData(test_seuratobj, metadata = test_dataset_index)
 
-    # add labels
+    # 2. add labels
     test_Labels <- as.data.frame(Labels[Test_Idx[[i]]], 
-                      row.names = colnames(test_seuratobj))
+                                 row.names = colnames(test_seuratobj))
     colnames(test_Labels) <- c('Labels')
     test_seuratobj <- AddMetaData(test_seuratobj, metadata = test_Labels)
+
+    # External test set
+    external_test_seuratobj <- CreateSeuratObject(counts = ExternalTestData)
+    external_test_Labels <- as.data.frame(ExternalTestLabels, 
+                                          row.names = colnames(external_test_seuratobj))
+    colnames(external_test_Labels) <- c('Labels')
+    external_test_seuratobj <- AddMetaData(external_test_seuratobj, metadata = external_test_Labels)
       
     Rprof(paste0(OutputDir,"/Rprof.out"), memory.profiling=TRUE)
-    start_time <- Sys.time()
+    prep_start_time <- Sys.time()
     # Normalize + HVG
     seuratobj.list <- SplitObject(seuratobj, split.by = 'dataset_index')
     for (dataset_i in 1:length(seuratobj.list)) {
@@ -92,25 +104,31 @@ test_seuratobj
     seuratobj.integrated <- ScaleData(seuratobj.integrated, verbose = FALSE)
     seuratobj.integrated <- RunPCA(seuratobj.integrated, npcs = 30, verbose = FALSE)
       
-    end_time <- Sys.time()
-    Rprof(NULL)
-    Training_Time_transferdata[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
-    print('memory usage:')
-    max_mem <- max(summaryRprof(paste0(OutputDir,"/Rprof.out"),memory="both")$by.total$mem.total)
-    print(max_mem)
-    Training_Memory_transferdata[i] <- max_mem
-      
-    # Prediction
-    Rprof(paste0(OutputDir,"/Rprof.out"), memory.profiling=TRUE)
-    start_time <- Sys.time()
-    # Preprocessing
+    # Testing Set Preprocessing
     test_seuratobj <- NormalizeData(test_seuratobj, verbose = FALSE)
     test_seuratobj <- FindVariableFeatures(test_seuratobj, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
 
     # Integrating new dataset
     test.anchors <- FindTransferAnchors(reference = seuratobj.integrated, query = test_seuratobj, dims = 1:30, reference.reduction = "pca")
+
+    # External Testing Set Preprocessing
+    external_test_seuratobj <- NormalizeData(external_test_seuratobj, verbose = FALSE)
+    external_test_seuratobj <- FindVariableFeatures(external_test_seuratobj, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
+
+    # Integrating new dataset
+    external_test.anchors <- FindTransferAnchors(reference = seuratobj.integrated, query = external_test_seuratobj, dims = 1:30, reference.reduction = "pca")
     
-    # Annotation
+    prep_end_time <- Sys.time()
+    Rprof(NULL)
+    Prep_Time_transferdata[i] <- as.numeric(difftime(prep_end_time,prep_start_time,units = 'secs'))
+    print('memory usage:')
+    max_mem <- max(summaryRprof(paste0(OutputDir,"/Rprof.out"),memory="both")$by.total$mem.total)
+    print(max_mem)
+    Prep_Memory_transferdata[i] <- max_mem
+
+    # Testing Set Annotation
+    Rprof(paste0(OutputDir,"/Rprof.out"), memory.profiling=TRUE)
+    start_time <- Sys.time()
     predictions <- TransferData(anchorset = test.anchors, refdata = seuratobj.integrated$Labels, dims = 1:30)
     #saveRDS(predictions, file='transferdata_prediction.rds')
     end_time <- Sys.time()
@@ -121,30 +139,53 @@ test_seuratobj
     print(max_mem)
     Testing_Memory_transferdata[i] <- max_mem
 
-    # Evaluation
-    match <- test_seuratobj$Labels == predictions$predicted.id
-    print(table(match))
-      
     True_Labels_transferdata[i] <- list(Labels[Test_Idx[[i]]])
     Pred_Labels_transferdata[i] <- list(predictions$predicted.id)
+
+    # External Testing Set Annotation
+    Rprof(paste0(OutputDir,"/Rprof.out"), memory.profiling=TRUE)
+    start_time <- Sys.time()
+    external_predictions <- TransferData(anchorset = external_test.anchors, refdata = seuratobj.integrated$Labels, dims = 1:30)
+    end_time <- Sys.time()
+    Rprof(NULL)
+    ExternalTesting_Time_transferdata[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
+    print('memory usage:')
+    max_mem <- max(summaryRprof(paste0(OutputDir,"/Rprof.out"),memory="both")$by.total$mem.total)
+    print(max_mem)
+    ExternalTesting_Memory_transferdata[i] <- max_mem
+
+    # Evaluation
+    match <- external_test_seuratobj$Labels == external_predictions$predicted.id
+    print(table(match))
+      
+    External_True_Labels_transferdata[i] <- list(ExternalTestLabels)
+    External_Pred_Labels_transferdata[i] <- list(external_predictions$predicted.id)
   }
   
   True_Labels_transferdata <- as.vector(unlist(True_Labels_transferdata))
   Pred_Labels_transferdata <- as.vector(unlist(Pred_Labels_transferdata))
-  Training_Time_transferdata <- as.vector(unlist(Training_Time_transferdata))
+  External_True_Labels_transferdata <- as.vector(unlist(External_True_Labels_transferdata))
+  External_Pred_Labels_transferdata <- as.vector(unlist(External_Pred_Labels_transferdata))
+  Prep_Time_transferdata <- as.vector(unlist(Prep_Time_transferdata))
   Testing_Time_transferdata <- as.vector(unlist(Testing_Time_transferdata))
-  Training_Memory_transferdata <- as.vector(unlist(Training_Memory_transferdata))
+  ExternalTesting_Time_transferdata <- as.vector(unlist(ExternalTesting_Time_transferdata))
+  Prep_Memory_transferdata <- as.vector(unlist(Prep_Memory_transferdata))
   Testing_Memory_transferdata <- as.vector(unlist(Testing_Memory_transferdata))
+  ExternalTesting_Memory_transferdata <- as.vector(unlist(ExternalTesting_Memory_transferdata))
   
   write.csv(True_Labels_transferdata,paste0(OutputDir,'/transferdata_true.csv'),row.names = FALSE)
   write.csv(Pred_Labels_transferdata,paste0(OutputDir,'/transferdata_pred.csv'),row.names = FALSE)
-  write.csv(Training_Time_transferdata,paste0(OutputDir,'/transferdata_training_Time.csv'),row.names = FALSE)
+  write.csv(External_True_Labels_transferdata,paste0(OutputDir,'/transferdata_true_external.csv'),row.names = FALSE)
+  write.csv(External_Pred_Labels_transferdata,paste0(OutputDir,'/transferdata_pred_external.csv'),row.names = FALSE)
+  write.csv(Prep_Time_transferdata,paste0(OutputDir,'/transferdata_prep_Time.csv'),row.names = FALSE)
   write.csv(Testing_Time_transferdata,paste0(OutputDir,'/transferdata_test_Time.csv'),row.names = FALSE)
-  write.csv(Training_Memory_transferdata,paste0(OutputDir,'/transferdata_training_Memory.csv'),row.names = FALSE)
+  write.csv(ExternalTesting_Time_transferdata,paste0(OutputDir,'/transferdata_external_test_Time.csv'),row.names = FALSE)
+  write.csv(Prep_Memory_transferdata,paste0(OutputDir,'/transferdata_prep_Memory.csv'),row.names = FALSE)
   write.csv(Testing_Memory_transferdata,paste0(OutputDir,'/transferdata_test_Memory.csv'),row.names = FALSE)
+  write.csv(ExternalTesting_Memory_transferdata,paste0(OutputDir,'/transferdata_external_test_Memory.csv'),row.names = FALSE)
 }
-if (args[6] == "0") {
-  run_transferdata(args[1], args[2], args[3], args[4])
+if (args[8] == "0") {
+  run_transferdata(args[1], args[2], args[3], args[4], args[5], args[6])
 } else {
-  run_transferdata(args[1], args[2], args[3], args[4], args[5], as.numeric(args[6]))
+  run_transferdata(args[1], args[2], args[3], args[4], args[5], args[6], args[7], as.numeric(args[8]))
 }

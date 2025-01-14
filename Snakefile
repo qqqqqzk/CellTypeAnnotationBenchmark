@@ -52,6 +52,8 @@ rule generate_CV_folds:
   params:
     column = config.get("column", 1) # default to 1
   singularity: "docker://scrnaseqbenchmark/cross_validation:{}".format(dockerTag)
+  benchmark:
+        "{output_dir}/benchmark_CV.txt"
   shell:
     "Rscript Cross_Validation.R "
     "{input} "
@@ -70,6 +72,8 @@ rule generate_dropouts_feature_rankings:
     output: "{output_dir}/rank_genes_dropouts.csv"
     log: "{output_dir}/rank_genes_dropouts.log"
     singularity: "docker://scrnaseqbenchmark/baseline:{}".format(dockerTag)
+    benchmark:
+        "{output_dir}/benchmark_HVG.txt"
     shell:
         "echo test > {wildcards.output_dir}/test\n"
         "python3 rank_gene_dropouts.py "
@@ -94,6 +98,8 @@ rule singleCellNet:
     test_time = "{output_dir}/singleCellNet/singleCellNet_test_time.csv",
     training_time = "{output_dir}/singleCellNet/singleCellNet_training_time.csv"
   log: "{output_dir}/singleCellNet/singleCellNet.log"
+  benchmark:
+        "{output_dir}/singleCellNet/benchmark.txt"
   params:
     n_features = config.get("number_of_features", 0)
   singularity: "docker://scrnaseqbenchmark/singlecellnet:{}".format(dockerTag)
@@ -193,6 +199,8 @@ rule CHETAH:
     total_time = "{output_dir}/CHETAH/CHETAH_total_time.csv",
     total_memory = "{output_dir}/CHETAH/CHETAH_total_memory.csv"
   log: "{output_dir}/CHETAH/CHETAH.log"
+  benchmark:
+        "{output_dir}/CHETAH/benchmark.txt"
   params:
     n_features = config.get("number_of_features", 0)
   #singularity: "docker://scrnaseqbenchmark/chetah:{}".format(dockerTag)
@@ -203,6 +211,8 @@ rule CHETAH:
     "{input.labfile} "
     "{input.folds} "
     "{wildcards.output_dir}/CHETAH "
+    "{input.external_datafile} "
+    "{input.external_labfile} "
     "{input.ranking} "
     "{params.n_features} "
     "&> {log}"
@@ -218,6 +228,8 @@ rule SingleR:
     true = "{output_dir}/SingleR/SingleR_true.csv",
     total_time = "{output_dir}/SingleR/SingleR_total_time.csv"
   log: "{output_dir}/SingleR/SingleR.log"
+  benchmark:
+        "{output_dir}/SingleR/benchmark.txt"
   params:
     n_features = config.get("number_of_features", 0)
   singularity: "docker://scrnaseqbenchmark/singler:{}".format(dockerTag)
@@ -241,9 +253,9 @@ rule transferdata:
     pred = "{output_dir}/transferdata/transferdata_pred.csv",
     true = "{output_dir}/transferdata/transferdata_true.csv",
     test_time = "{output_dir}/transferdata/transferdata_test_Time.csv",
-    training_time = "{output_dir}/transferdata/transferdata_training_Time.csv",
+    prep_time = "{output_dir}/transferdata/transferdata_prep_Time.csv",
     test_memory = "{output_dir}/transferdata/transferdata_test_Memory.csv",
-    training_memory = "{output_dir}/transferdata/transferdata_training_Memory.csv"
+    prep_memory = "{output_dir}/transferdata/transferdata_prep_Memory.csv"
   log: "{output_dir}/transferdata/transferdata.log"
   benchmark:
         "{output_dir}/transferdata/benchmark.txt"
@@ -257,6 +269,8 @@ rule transferdata:
     "{input.labfile} "
     "{input.folds} "
     "{wildcards.output_dir}/transferdata "
+    "{input.external_datafile} "
+    "{input.external_labfile} "
     "{input.ranking} "
     "{params.n_features} "
     "&> {log}"
@@ -272,12 +286,16 @@ rule scPred:
     true = "{output_dir}/scPred/scPred_True_Labels.csv",
     test_time = "{output_dir}/scPred/scPred_Testing_Time.csv",
     training_time = "{output_dir}/scPred/scPred_Training_Time.csv",
-    test_memory = "{output_dir}/scPred/scPred_Testing_Memory.csv",
-    training_memory = "{output_dir}/scPred/scPred_Training_Memory.csv"
+    #test_memory = "{output_dir}/scPred/scPred_Testing_Memory.csv",
+    #training_memory = "{output_dir}/scPred/scPred_Training_Memory.csv"
   log: "{output_dir}/scPred/scPred.log"
   params:
     n_features = config.get("number_of_features", 0)
-  singularity: "docker://derrickd/scpred_cellstates:102021_msigdbr"
+  #singularity: "docker://derrickd/scpred_cellstates:102021_msigdbr"
+  conda:
+    "r43benchmark"
+  benchmark:
+        "{output_dir}/scPred/benchmark.txt"
   shell:
     "Rscript Scripts/run_scPred.R "
     "{input.datafile} "

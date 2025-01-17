@@ -28,9 +28,9 @@ Cross_Validation <- function(LabelsPath, col_Index = 1, OutputDir){
   #dataset_index <- read.csv(paste(data_path, '/datasets.csv', sep=''))
   Train_Idx <- list()
   Test_Idx <- list()
-  n_folds <- 5
   # unique value of dataset_index
   unival <- unique(dataset_index$dataset_index)
+  n_folds <- length(unival)
   for (i in 1:n_folds){
       # train: exclude i dataset
       Train_Idx[[i]] <- which(dataset_index$dataset_index != unival[i])

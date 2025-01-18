@@ -42,6 +42,7 @@ run_CHETAH<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,ExternalTestData
   True_Labels_CHETAH <- list()
   Pred_Labels_CHETAH <- list()
   ExternalTestPred_Labels_CHETAH <- list()
+  Prep_Time_CHETAH <- list()
   Total_Time_CHETAH <- list()
   Total_Memory_CHETAH <- list()
   Data = t(as.matrix(Data))
@@ -71,12 +72,12 @@ run_CHETAH<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,ExternalTestData
       counts_test <- Matrix(logcounts(sce_test), sparse = TRUE)
       tsne_test <- reducedDim(sce_test, "TSNE")[,1:2]
 
-      sce_test_externl <- logNormCounts(sce_test_externl)
-      pca_data_external <- prcomp(t(logcounts(sce_test_externl)), rank=30)
+      sce_test_external <- logNormCounts(sce_test_external)
+      pca_data_external <- prcomp(t(logcounts(sce_test_external)), rank=30)
       tsne_data_external <- Rtsne(pca_data_external$x[,1:30], pca = FALSE)
-      reducedDims(sce_test_externl) <- list(PCA=pca_data_external$x, TSNE=tsne_data_external$Y)
-      counts_test_externl <- Matrix(logcounts(sce_test_externl), sparse = TRUE)
-      tsne_test_externl <- reducedDim(sce_test_externl, "TSNE")[,1:2]
+      reducedDims(sce_test_external) <- list(PCA=pca_data_external$x, TSNE=tsne_data_external$Y)
+      counts_test_external <- Matrix(logcounts(sce_test_external), sparse = TRUE)
+      tsne_test_external <- reducedDim(sce_test_external, "TSNE")[,1:2]
       
       ## For the reference we define a "counts" assay and "celltypes" metadata
       sce <- SingleCellExperiment(assays = list(counts = counts_sce),
@@ -118,12 +119,12 @@ run_CHETAH<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,ExternalTestData
       counts_test <- Matrix(logcounts(sce_test), sparse = TRUE)
       tsne_test <- reducedDim(sce_test, "TSNE")[,1:2]
 
-      sce_test_externl <- logNormCounts(sce_test_externl)
-      pca_data_external <- prcomp(t(logcounts(sce_test_externl)), rank=30)
+      sce_test_external <- logNormCounts(sce_test_external)
+      pca_data_external <- prcomp(t(logcounts(sce_test_external)), rank=30)
       tsne_data_external <- Rtsne(pca_data_external$x[,1:30], pca = FALSE)
-      reducedDims(sce_test_externl) <- list(PCA=pca_data_external$x, TSNE=tsne_data_external$Y)
-      counts_test_externl <- Matrix(logcounts(sce_test_externl), sparse = TRUE)
-      tsne_test_externl <- reducedDim(sce_test_externl, "TSNE")[,1:2]
+      reducedDims(sce_test_external) <- list(PCA=pca_data_external$x, TSNE=tsne_data_external$Y)
+      counts_test_external <- Matrix(logcounts(sce_test_external), sparse = TRUE)
+      tsne_test_external <- reducedDim(sce_test_external, "TSNE")[,1:2]
       
       ## For the reference we define a "counts" assay and "celltypes" metadata
       sce <- SingleCellExperiment(assays = list(counts = counts_sce),
@@ -159,18 +160,19 @@ run_CHETAH<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,ExternalTestData
   True_Labels_CHETAH <- as.vector(unlist(True_Labels_CHETAH))
   Pred_Labels_CHETAH <- as.vector(unlist(Pred_Labels_CHETAH))
   ExternalTestPred_Labels_CHETAH <- as.vector(unlist(ExternalTestPred_Labels_CHETAH))
+  Prep_Time_CHETAH <- as.vector(unlist(Prep_Time_CHETAH))
   Total_Time_CHETAH <- as.vector(unlist(Total_Time_CHETAH))
   Total_Memory_CHETAH <- as.vector(unlist(Total_Memory_CHETAH))
   write.csv(True_Labels_CHETAH,paste0(OutputDir,'/CHETAH_true.csv'),row.names = FALSE)
   write.csv(Pred_Labels_CHETAH,paste0(OutputDir,'/CHETAH_pred.csv'),row.names = FALSE)
   write.csv(ExternalTestPred_Labels_CHETAH,paste0(OutputDir,'/CHETAH_pred_external.csv'),row.names = FALSE)
-  write.csv(Total_Time_CHETAH,paste0(OutputDir,'/CHETAH_total_time.csv'),row.names = FALSE)
   write.csv(Prep_Time_CHETAH,paste0(OutputDir,'/CHETAH_prep_time.csv'),row.names = FALSE)
+  write.csv(Total_Time_CHETAH,paste0(OutputDir,'/CHETAH_total_time.csv'),row.names = FALSE)
   write.csv(Total_Memory_CHETAH,paste0(OutputDir,'/CHETAH_total_memory.csv'),row.names = FALSE)
 }
 
-if (args[6] == "0") {
-  run_CHETAH(args[1], args[2], args[3], args[4], args[5])
+if (args[8] == "0") {
+  run_CHETAH(args[1], args[2], args[3], args[4], args[5], args[6])
 } else {
-  run_CHETAH(args[1], args[2], args[3], args[4], args[5], args[6], as.numeric(args[7]))
+  run_CHETAH(args[1], args[2], args[3], args[4], args[5], args[6], args[7], as.numeric(args[8]))
 }

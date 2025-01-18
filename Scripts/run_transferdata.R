@@ -39,7 +39,8 @@ run_transferdata <- function(DataPath,LabelsPath,CV_RDataPath,OutputDir,External
   options(future.globals.maxSize = 8000 * 1024^2)  # SCTransform
   True_Labels_transferdata <- list()
   Pred_Labels_transferdata <- list()
-  ExternalPred_Labels_transferdata <- list()
+  External_True_Labels_transferdata <- list()
+  External_Pred_Labels_transferdata <- list()
   Prep_Time_transferdata <- list()
   Testing_Time_transferdata <- list()
   ExternalTesting_Time_transferdata <- list()
@@ -89,6 +90,20 @@ run_transferdata <- function(DataPath,LabelsPath,CV_RDataPath,OutputDir,External
     prep_start_time <- Sys.time()
     # Normalize + HVG
     seuratobj.list <- SplitObject(seuratobj, split.by = 'dataset_index')
+
+    # Filter out datasets with fewer than 500 cells
+    filtered_seuratobj.list <- lapply(seuratobj.list, function(seurat_obj) {
+                                            if (ncol(seurat_obj) >= 500) {
+                                              return(seurat_obj)
+                                            } else {
+                                              return(NULL)
+                                            }
+                                          })
+    # Remove NULL entries from the list
+    seuratobj.list <- Filter(Negate(is.null), filtered_seuratobj.list)
+    #print('seuratobj.list')
+    print(length(seuratobj.list))
+
     for (dataset_i in 1:length(seuratobj.list)) {
         seuratobj.list[[dataset_i]] <- NormalizeData(seuratobj.list[[dataset_i]], verbose = FALSE)
         seuratobj.list[[dataset_i]] <- FindVariableFeatures(seuratobj.list[[dataset_i]], selection.method = "vst", nfeatures = 2000, verbose = FALSE)
@@ -166,9 +181,11 @@ run_transferdata <- function(DataPath,LabelsPath,CV_RDataPath,OutputDir,External
   Pred_Labels_transferdata <- as.vector(unlist(Pred_Labels_transferdata))
   External_True_Labels_transferdata <- as.vector(unlist(External_True_Labels_transferdata))
   External_Pred_Labels_transferdata <- as.vector(unlist(External_Pred_Labels_transferdata))
+
   Prep_Time_transferdata <- as.vector(unlist(Prep_Time_transferdata))
   Testing_Time_transferdata <- as.vector(unlist(Testing_Time_transferdata))
   ExternalTesting_Time_transferdata <- as.vector(unlist(ExternalTesting_Time_transferdata))
+
   Prep_Memory_transferdata <- as.vector(unlist(Prep_Memory_transferdata))
   Testing_Memory_transferdata <- as.vector(unlist(Testing_Memory_transferdata))
   ExternalTesting_Memory_transferdata <- as.vector(unlist(ExternalTesting_Memory_transferdata))
